@@ -16,7 +16,7 @@ from . import settings_store
 PROVIDER_DEFAULTS = {
     "groq": {
         "base_url": "https://api.groq.com/openai/v1",
-        "default_model": "llama-3.3-70b-versatile",
+        "default_model": "openai/gpt-oss-120b",
         "default_vision_model": "qwen/qwen3.6-27b",
     },
     "openai": {

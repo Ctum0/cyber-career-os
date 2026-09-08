@@ -8,6 +8,7 @@ to env bootstrap values from config.py; feature code resolves effective
 values via get() (or `value or config.ENV_VALUE` where env must win last).
 """
 import json
+import os
 from typing import Any
 
 from . import config
@@ -20,11 +21,11 @@ _loaded = False
 # Defaults — used when a key has never been set. Chain to env bootstrap.
 DEFAULTS: dict[str, Any] = {
     # AI Provider
-    "ai.provider": "groq",               # "groq" | "openai" | "custom"
-    "ai.base_url": "",                    # custom endpoint (e.g. http://localhost:11434/v1)
-    "ai.api_key": "",                     # provider API key
-    "ai.model": "",                       # default model ID (empty = provider default)
-    "ai.vision_model": "",                # vision model ID
+    "ai.provider": os.getenv("AI_PROVIDER", "groq"),   # "groq" | "openai" | "custom"
+    "ai.base_url": os.getenv("AI_BASE_URL", ""),        # custom endpoint (e.g. http://localhost:11434/v1)
+    "ai.api_key": config.GROQ_API_KEY,                  # provider API key (.env bootstrap; Settings UI overrides)
+    "ai.model": config.GROQ_MODEL,                       # default model ID (empty = provider default)
+    "ai.vision_model": config.GROQ_VISION_MODEL,         # vision model ID
     "ai.task_models": {},                 # {"entity_extraction": "model-id", ...}
 
     # Obsidian (empty string / 0 = fall back to env bootstrap in config.py)
