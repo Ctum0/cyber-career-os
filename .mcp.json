@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--browser",
+        "chromium",
+        "--output-dir",
+        ".artifacts/browser",
+        "--caps",
+        "vision,devtools"
+      ],
+      "env": {
+        "PLAYWRIGHT_MCP_EXECUTABLE_PATH": "/home/ctum/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome"
+      },
+      "cwd": "${PWD}"
+    }
+  }
+}

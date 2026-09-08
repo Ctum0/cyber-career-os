@@ -1,0 +1,188 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap');
+
+::root {
+  --foreground-rgb: 15, 23, 42;
+  --background-rgb: 248, 250, 252;
+}
+
+.dark {
+  --foreground-rgb: 241, 245, 249;
+  --background-rgb: 2, 6, 23;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background-color: rgb(var(--background-rgb));
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+}
+
+/* Monospace for code/data */
+.font-mono, code, pre {
+  font-family: var(--font-jetbrains-mono), 'Fira Code', monospace;
+}
+
+
+@layer components {
+  /* ---- Canonical surfaces ----
+   * .surface       primary panel (cards, forms, result blocks)
+   * .surface-muted quiet panel (page-level wells, sidebars)
+   * .surface-inset embedded content inside a surface (code, quotes)
+   * .tile          interactive surface (clickable list rows/cards)
+   */
+  .surface {
+    @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl;
+  }
+  .surface-muted {
+    @apply bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl;
+  }
+  .surface-inset {
+    @apply bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl;
+  }
+  .tile {
+    @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl
+           transition-colors cursor-pointer;
+  }
+
+  /* ---- Cards: the canonical panel used by every page ---- */
+  .card {
+    @apply surface p-6;
+  }
+
+  /* ---- Buttons ---- */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 bg-cyber-600 hover:bg-cyber-500
+           text-white font-semibold py-2.5 px-5 rounded-xl transition-all
+           active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-500/50
+           shadow-sm shadow-cyber-600/20;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2
+           bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700
+           text-slate-700 dark:text-slate-200 font-medium py-2.5 px-5 rounded-xl transition-all
+           active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-500/50;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2
+           hover:bg-slate-100 dark:hover:bg-slate-800
+           text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100
+           font-medium py-2 px-3 rounded-lg transition-colors
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-500/50;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2
+           bg-red-500/10 hover:bg-red-500/20 border border-red-500/30
+           text-red-600 dark:text-red-400 font-medium py-2 px-4 rounded-xl transition-colors
+           disabled:opacity-40 disabled:cursor-not-allowed
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/50;
+  }
+
+  /* ---- Form controls ---- */
+  .input {
+    @apply w-full px-4 py-2.5 bg-white dark:bg-slate-900
+           border border-slate-300 dark:border-slate-700 rounded-xl
+           text-slate-900 dark:text-slate-100 placeholder-slate-400
+           focus:ring-2 focus:ring-cyber-500/40 focus:border-cyber-500
+           outline-none transition-all text-sm
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .label {
+    @apply block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5 tracking-wide uppercase;
+  }
+
+  /* ---- Badges ---- */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold
+           border border-transparent tracking-wide;
+  }
+  .badge-green {
+    @apply badge bg-cyber-500/10 text-cyber-700 dark:text-cyber-400 border-cyber-500/20;
+  }
+  .badge-amber {
+    @apply badge bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20;
+  }
+  .badge-red {
+    @apply badge bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20;
+  }
+  .badge-slate {
+    @apply badge bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400;
+  }
+
+  /* ---- Stat display ---- */
+  .stat-value {
+    @apply text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white;
+  }
+  .stat-label {
+    @apply text-sm font-medium text-slate-500 dark:text-slate-400;
+  }
+
+  /* ---- Section heading ---- */
+  .section-title {
+    @apply text-lg font-bold text-slate-900 dark:text-slate-100;
+  }
+  .section-desc {
+    @apply text-sm text-slate-500 dark:text-slate-400 mt-1 leading-relaxed;
+  }
+
+  /* ---- Table ---- */
+  .table-row {
+    @apply border-b border-slate-100 dark:border-slate-800/60 last:border-none
+           hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors;
+  }
+
+  /* ---- Focus ring (for custom interactive elements) ---- */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-500/50;
+  }
+}
+
+/* ---- Animation utilities (dependency-free; replace dead `animate-in`) ---- */
+@layer utilities {
+  .fade-in {
+    animation: fade-in 200ms ease-out both;
+  }
+  .fade-in-up {
+    animation: fade-in-up 250ms ease-out both;
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---- Scrollbar styling ---- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184 / 0.3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(148 163 184 / 0.5);
+}
