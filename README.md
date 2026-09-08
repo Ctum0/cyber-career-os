@@ -115,64 +115,88 @@ display; technical detail stays in server logs.
 docker compose -f docker-compose.yml up --build -d
 ```
 
-Frontend: http://localhost:3000 · API docs: http://localhost:8000/docs.
 Use the explicit `-f docker-compose.yml` — the repo root also has a
-`compose.yaml` (development tooling: playwright-mcp) that compose v2 would
-otherwise pick first.
+`compose.yaml` (dev tooling) that compose v2 would otherwise pick first.
+
+Two entry points:
+
+- **Your own reverse proxy (Caddy etc.)** — the default. Both containers
+  publish loopback-only host ports (default `127.0.0.1:1122` frontend,
+  `127.0.0.1:1123` backend; override `FRONTEND_PORT`/`BACKEND_PORT`). Point
+  your proxy at the frontend port and proxy `/api` off the same site block —
+  the frontend already forwards `/api/*` to the backend server-side, so a
+  single site block with no `/api` handle is enough:
+
+  ```caddyfile
+  # Caddyfile — one site, one origin; /api/* is same-origin and handled
+  # by the Next.js rewrite inside the frontend container.
+  career.example.com {
+      reverse_proxy 127.0.0.1:1122
+  }
+  ```
+
+  HTTPS is automatic (Let's Encrypt). `CORS_ORIGINS` can stay at its default
+  when everything is same-origin through the proxy.
+
+- **Coolify's proxy** — assign a domain to the `frontend` service in the
+  Coolify UI and delete the loopback `ports:` mappings. Then Coolify's
+  Traefik terminates TLS and routes to the container port (3000) directly.
+  Set `CORS_ORIGINS=https://<your-coolify-domain>` in that case.
+
+### Coolify (Docker Compose resource)
+
+1. **New Resource → Docker Compose**, point it at this GitHub repo, select
+   `docker-compose.yml`.
+2. Coolify lists the stack's variables. `GROQ_API_KEY` is **required**
+   (`${GROQ_API_KEY:?}` — deploy is blocked until you paste a key). The rest
+   are prefilled with defaults; edit if needed.
+3. Leave domains unassigned if you use your own Caddy (loopback ports are
+   the entry point); assign a frontend domain only for the Coolify-proxy flow.
+4. Deploy. SQLite data persists in the `backend-data` volume named volume.
+
+`backend/.env` is **not** used in this stack (it's gitignored and absent on
+Coolify's fresh clone — the compose `environment:` block is the env source).
+The Settings UI still wins over these for anything configurable there.
 
 ### Environment variables
 
 | Variable | Where | Default | Purpose |
 |---|---|---|---|
-| `GROQ_API_KEY` | backend/.env | — | Groq API key (bootstrap; Settings UI overrides) |
-| `GROQ_MODEL` | backend/.env | `openai/gpt-oss-120b` | Default LLM model |
-| `GROQ_VISION_MODEL` | backend/.env | `qwen/qwen3.6-27b` | Vision model (image extraction) |
-| `CORS_ORIGINS` | backend/.env | `http://localhost:3000` | Comma-separated allowed browser origins |
-| `BACKEND_URL` | frontend build arg | `http://backend:8000` | Backend address **as reachable from the frontend container** |
-| `OBSIDIAN_VAULT_PATH` | backend/.env | unset | Optional: mount a vault and set the path (container-internal, e.g. a volume) |
-| Ports | docker-compose.yml | `3000`, `127.0.0.1:8000` | Frontend/backend host ports (backend loopback-only — see Security) |
-
-The backend container reads `backend/.env` via `env_file` — it is the env
-source in compose. It feeds the `.env` bootstrap layer only: Settings UI / DB
-values still win at runtime for anything configured there. `GROQ_API_KEY` etc.
-are bootstrap fallbacks, not overrides of the UI.
-
-`CORS_ORIGINS` must include the public frontend URL users actually browse
-(e.g. `http://localhost:3000` locally, `https://your.domain` in production)
-— requests blocked by CORS never reach the rewrite proxy.
+| `GROQ_API_KEY` | required | — | Groq API key (bootstrap; Settings UI overrides) |
+| `GROQ_MODEL` | backend env | `openai/gpt-oss-120b` | Default LLM model |
+| `GROQ_VISION_MODEL` | backend env | `qwen/qwen3.6-27b` | Vision model (image extraction) |
+| `CORS_ORIGINS` | backend env | `http://localhost:3000` | Comma-separated allowed browser origins — only matters if the backend is reachable under its own origin |
+| `BACKEND_URL` | frontend build arg | `http://backend:8000` | Backend address as reachable from the frontend container (compose network) |
+| `FRONTEND_PORT` / `BACKEND_PORT` | compose | `1122` / `1123` | Loopback host ports; container ports stay 3000/8000 |
+| `OBSIDIAN_VAULT_PATH` | backend env | unset | Mount the vault (`:ro`) and set the container-internal path |
 
 `BACKEND_URL` is **baked at image build time**: Next.js evaluates the
 `/api/:path*` rewrites once during `npm run build` and `next start` never
-re-reads the variable (verified against Next 14.1.0). Rebuild the frontend
-image to change it — setting a runtime env changes nothing:
-
-```bash
-docker compose -f docker-compose.yml up --build -d frontend
-```
-
-In compose the value is `http://backend:8000` (service name on the docker
-network). It is the address the **frontend server** proxies to; browsers talk
-to the frontend on :3000 only and never see it.
+re-reads it (verified against Next 14.1.0). To change it, rebuild the frontend
+image — a runtime env var changes nothing.
 
 ### Persistence & sizing
 
-- SQLite database lives in the `backend-data` volume (`/app/data` inside the
-  container). It survives container recreation; delete the volume to reset.
+- SQLite database lives in the `backend-data` named volume (`/app/data` in
+  the container). Survives container recreation and `coolify redeploy`;
+  delete the volume to reset. For host backups, back up the volume's
+  contents (stop the backend first — WAL files must not be copied mid-write).
 - Run exactly **one** backend instance. SQLite + the in-process scheduler
   (RSS ingest, queue processing, confidence decay, vault scans — see
-  [Scheduler](#scheduler)) assume a single always-on process; **do not use
-  serverless platforms** or scale `backend` beyond 1, or jobs run duplicated
+  [Scheduler](#scheduler)) assume a single always-on process; do not use
+  serverless platforms or scale `backend` beyond 1, or jobs run duplicated
   or split across writers.
-- For Obsidian sync, mount the vault into the backend container and set
-  `OBSIDIAN_VAULT_PATH` to the container-internal path.
+- For Obsidian sync, mount the vault into the backend container read-only
+  and set `OBSIDIAN_VAULT_PATH` to the container-internal path.
 
 ### Security
 
 This is a personal, unauthenticated tool: no route requires auth, including
 `/settings` (the API key is masked in GET, but AI test/model endpoints and
-all graph/ingest endpoints are open if the port is reachable). Do not expose
-`:8000` to a network — compose binds it to `127.0.0.1` only; the frontend
-container reaches the backend over the compose network, not the published
-port. If you need remote access, put both apps behind a reverse proxy with
-auth (e.g. Caddy/Traefik + basic auth) or a VPN (e.g. Tailscale), and keep
-the backend port private regardless.
+all graph/ingest endpoints are open if the port is reachable). Both ports
+bind to `127.0.0.1` only — an internet-facing VPS exposes nothing from this
+stack by itself; access goes through your proxy. For remote access, put the
+proxy behind auth (e.g. Caddy `basic_auth`) or a VPN (e.g. Tailscale) — or
+have Caddy only listen on your tailnet/VPN interface. Keep the backend
+port private regardless: the frontend reaches it over the compose network,
+never the published port.

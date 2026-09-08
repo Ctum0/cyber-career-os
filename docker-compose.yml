@@ -1,46 +1,78 @@
-# Cyber Career OS — single-host deployment.
+# Cyber Career OS — single-host deployment (docker compose / Coolify).
 #
-# Topology: browser → frontend:3000; frontend server (Next.js rewrite proxy)
-# → backend:8000. The /api/* rewrites in next.config.js run server-side, so
-# BACKEND_URL must be the backend's address as reachable FROM the frontend
-# container on the docker network — http://backend:8000 — not a browser URL.
+# Topology (own reverse proxy, e.g. Caddy on the host):
+#   browser → https://your-domain (Caddy) → 127.0.0.1:FRONTEND_PORT
+#          → frontend container :3000
+#          → (Next.js server-side /api/* rewrite) → http://backend:8000
+#   Browsers never talk to the backend directly.
 #
-# Run with the explicit -f flag: the repo also contains a compose.yaml used
-# by development tooling (playwright-mcp), and compose v2 prefers it.
+# Host ports default to 1122/1123 to avoid conflicts (Coolify's own dashboard
+# commonly uses 8000). Override via FRONTEND_PORT / BACKEND_PORT — container
+# ports stay 3000/8000 regardless.
+#
+# Ports are bound to 127.0.0.1: only a proxy on the same host (or an SSH
+# tunnel) can reach them — the backend has NO authentication. Do not remove
+# the 127.0.0.1 prefix unless you firewall the ports.
+#
+# Coolify: create a "Docker Compose" resource from this repo and pick this
+# file. The environment: block uses ${VAR:?} (required — Coolify blocks deploy
+# until set) and ${VAR:-default} (optional, editable in the UI). Do NOT assign
+# Coolify domains if you bring your own Caddy — the loopback ports are the
+# entry point. backend/.env is NOT used here (gitignored, absent on a fresh
+# clone).
+#
+# Plain docker compose (no Coolify): put the variables in a root .env file
+# (gitignored) or export them, then:
 #   docker compose -f docker-compose.yml up --build -d
-#
-# Backend state: SQLite + in-process scheduler on ONE always-on container
-# (never serverless, never scale >1). The named volume persists the DB.
 services:
   backend:
     build: ./backend
-    env_file: backend/.env
+    environment:
+      # Required — red in Coolify until set; compose refuses to start without it.
+      - GROQ_API_KEY=${GROQ_API_KEY:?}
+      - GROQ_MODEL=${GROQ_MODEL:-openai/gpt-oss-120b}
+      - GROQ_VISION_MODEL=${GROQ_VISION_MODEL:-qwen/qwen3.6-27b}
+      # Allowed browser origins (comma-separated). The /api/* proxy is
+      # same-origin, so CORS rarely applies — set it to your public frontend
+      # URL only if you also expose the backend directly (e.g. api.* subdomain).
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+      # Optional Obsidian sync — uncomment TOGETHER with the :ro vault volume.
+      # - OBSIDIAN_VAULT_PATH=/vault
     volumes:
       - backend-data:/app/data
+      # - /path/to/vault:/vault:ro
     ports:
-      # Loopback-only publish: the backend has NO authentication — never
-      # expose :8000 directly to a network. The frontend container reaches
-      # the backend over the compose network (http://backend:8000), not via
-      # this published port; keep it for local dev access (/docs) only.
-      - "127.0.0.1:8000:8000"
+      # Loopback-only host access to the API (/docs, health). Delete this
+      # whole mapping if you don't need it; the frontend uses the compose
+      # network (http://backend:8000), not this port.
+      - "127.0.0.1:${BACKEND_PORT:-1123}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "__import__('urllib.request').request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
   frontend:
     build:
       context: ./frontend
       args:
-        # Effective value — Next.js bakes rewrites at build time; this is
-        # what the container actually proxies /api/* to.
+        # Effective value — Next.js bakes rewrites at build time (verified
+        # against Next 14.1.0); `next start` never re-reads BACKEND_URL.
+        # This is the address reachable FROM the frontend container on the
+        # compose network, not a browser or host URL.
         BACKEND_URL: http://backend:8000
-    environment:
-      # Kept for shape/consistency only. `next start` does NOT re-read
-      # BACKEND_URL (verified against Next 14.1.0); the build arg above is
-      # the value in effect. To change it, rebuild the frontend image.
-      BACKEND_URL: http://backend:8000
     ports:
-      - "3000:3000"
+      - "127.0.0.1:${FRONTEND_PORT:-1122}:3000"
     depends_on:
       - backend
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
 
 volumes:
