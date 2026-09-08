@@ -108,3 +108,71 @@ Backend tests run against isolated temp databases — the real DB is never touch
 Interactive docs at `http://localhost:8000/docs`. Errors use one shape:
 `{"error": {"code": "...", "message": "...", "details": {}}}` — messages are safe to
 display; technical detail stays in server logs.
+
+## Deployment (Docker, single host)
+
+```bash
+docker compose -f docker-compose.yml up --build -d
+```
+
+Frontend: http://localhost:3000 · API docs: http://localhost:8000/docs.
+Use the explicit `-f docker-compose.yml` — the repo root also has a
+`compose.yaml` (development tooling: playwright-mcp) that compose v2 would
+otherwise pick first.
+
+### Environment variables
+
+| Variable | Where | Default | Purpose |
+|---|---|---|---|
+| `GROQ_API_KEY` | backend/.env | — | Groq API key (bootstrap; Settings UI overrides) |
+| `GROQ_MODEL` | backend/.env | `openai/gpt-oss-120b` | Default LLM model |
+| `GROQ_VISION_MODEL` | backend/.env | `qwen/qwen3.6-27b` | Vision model (image extraction) |
+| `CORS_ORIGINS` | backend/.env | `http://localhost:3000` | Comma-separated allowed browser origins |
+| `BACKEND_URL` | frontend build arg | `http://backend:8000` | Backend address **as reachable from the frontend container** |
+| `OBSIDIAN_VAULT_PATH` | backend/.env | unset | Optional: mount a vault and set the path (container-internal, e.g. a volume) |
+| Ports | docker-compose.yml | `3000`, `127.0.0.1:8000` | Frontend/backend host ports (backend loopback-only — see Security) |
+
+The backend container reads `backend/.env` via `env_file` — it is the env
+source in compose. It feeds the `.env` bootstrap layer only: Settings UI / DB
+values still win at runtime for anything configured there. `GROQ_API_KEY` etc.
+are bootstrap fallbacks, not overrides of the UI.
+
+`CORS_ORIGINS` must include the public frontend URL users actually browse
+(e.g. `http://localhost:3000` locally, `https://your.domain` in production)
+— requests blocked by CORS never reach the rewrite proxy.
+
+`BACKEND_URL` is **baked at image build time**: Next.js evaluates the
+`/api/:path*` rewrites once during `npm run build` and `next start` never
+re-reads the variable (verified against Next 14.1.0). Rebuild the frontend
+image to change it — setting a runtime env changes nothing:
+
+```bash
+docker compose -f docker-compose.yml up --build -d frontend
+```
+
+In compose the value is `http://backend:8000` (service name on the docker
+network). It is the address the **frontend server** proxies to; browsers talk
+to the frontend on :3000 only and never see it.
+
+### Persistence & sizing
+
+- SQLite database lives in the `backend-data` volume (`/app/data` inside the
+  container). It survives container recreation; delete the volume to reset.
+- Run exactly **one** backend instance. SQLite + the in-process scheduler
+  (RSS ingest, queue processing, confidence decay, vault scans — see
+  [Scheduler](#scheduler)) assume a single always-on process; **do not use
+  serverless platforms** or scale `backend` beyond 1, or jobs run duplicated
+  or split across writers.
+- For Obsidian sync, mount the vault into the backend container and set
+  `OBSIDIAN_VAULT_PATH` to the container-internal path.
+
+### Security
+
+This is a personal, unauthenticated tool: no route requires auth, including
+`/settings` (the API key is masked in GET, but AI test/model endpoints and
+all graph/ingest endpoints are open if the port is reachable). Do not expose
+`:8000` to a network — compose binds it to `127.0.0.1` only; the frontend
+container reaches the backend over the compose network, not the published
+port. If you need remote access, put both apps behind a reverse proxy with
+auth (e.g. Caddy/Traefik + basic auth) or a VPN (e.g. Tailscale), and keep
+the backend port private regardless.

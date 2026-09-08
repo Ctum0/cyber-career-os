@@ -25,6 +25,11 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.6-27b")
 
+# --- CORS middleware bootstrap ------------------------------------------------ #
+# Comma-separated allowed origins (CORS_ORIGINS env var). Consumed by main.py
+# when the app is assembled — middleware wiring, not a runtime /settings value.
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
+
 # --- Obsidian vault sync bootstrap (also configurable at /settings) --------- #
 # Feature is disabled until a vault path is set (DB setting or this env var).
 OBSIDIAN_VAULT_PATH = os.getenv("OBSIDIAN_VAULT_PATH", "")

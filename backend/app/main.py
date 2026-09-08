@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from .core.config import CORS_ORIGINS
 from .core.database import init_db
 from .core.errors import register_error_handlers
 from .api import ingest, graph, roles, skills, projects, ctf, applications, digest, obsidian, settings
@@ -56,7 +57,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

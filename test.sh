@@ -45,6 +45,13 @@ cleanup() {
     kill "$UVI_PID" 2>/dev/null || true
     wait "$UVI_PID" 2>/dev/null || true
   fi
+  # Restore backend/.env to its pre-run state when this run auto-set the fixture
+  # vault (snapshot taken in the vault fixture section below).
+  if [ "${ENV_VAULT_PRESENT:-0}" -eq 0 ] && [ "${ENV_BYTES_BEFORE:-0}" -gt 0 ] \
+     && [ -f "$BACKEND_DIR/.env" ] \
+     && [ "$(wc -c < "$BACKEND_DIR/.env")" -gt "$ENV_BYTES_BEFORE" ]; then
+    truncate -s "$ENV_BYTES_BEFORE" "$BACKEND_DIR/.env"
+  fi
 }
 trap cleanup EXIT
 
@@ -64,7 +71,15 @@ echo "==> Ensuring backend dependencies..."
 
 # --- Obsidian vault fixture (safe test vault, never the real one) --------- #
 VAULT="$BACKEND_DIR/data/vault_test"
-if ! grep -qE '^OBSIDIAN_VAULT_PATH=' "$BACKEND_DIR/.env"; then
+# Snapshot .env (size before any append) so cleanup() can restore the user's
+# original OBSIDIAN_VAULT_PATH state (present/absent and value) on exit.
+ENV_VAULT_PRESENT=0
+ENV_BYTES_BEFORE=0
+if grep -qE '^OBSIDIAN_VAULT_PATH=' "$BACKEND_DIR/.env"; then
+  ENV_VAULT_PRESENT=1
+else
+  # Auto-set the fixture vault for this run; cleanup() strips these lines again.
+  ENV_BYTES_BEFORE=$(wc -c < "$BACKEND_DIR/.env")
   echo "OBSIDIAN_VAULT_PATH=$VAULT" >> "$BACKEND_DIR/.env"
   echo "OBSIDIAN_REQUIRED_TAGS=cyber" >> "$BACKEND_DIR/.env"
   echo "OBSIDIAN_MAX_NOTES_PER_SCAN=10" >> "$BACKEND_DIR/.env"
@@ -142,22 +157,25 @@ if [ "$REAL_KEY" -eq 1 ]; then
   check "obsidian sync"     200 POST /obsidian/sync
   # Assert the scanner produced graph nodes and skipped .obsidian/+unchanged files.
   "$BACKEND_DIR/venv/bin/python" - "$BACKEND_DIR" <<'PY'
-import asyncio, sys, json, os
+import asyncio, sys, os
 sys.path.insert(0, sys.argv[1])
 os.chdir(sys.argv[1])
 from app.services.obsidian import scan_vault, is_enabled
-assert is_enabled(), "OBSIDIAN_VAULT_PATH not set"
-res = asyncio.run(scan_vault(limit=50))
-# First pass: scan all fixture files; a re-pass must not re-ingest anything.
-res2 = asyncio.run(scan_vault(limit=50))
-assert res["total_files"] == 2, f"expected 2 fixture notes, got {res['total_files']}"
-assert res2["unchanged"] >= 1 or res2["scanned"] == 0, "second pass should find no new work"
-ok = True
-for label, data in (("first", res), ("second", res2)):
-    for field in ("ingested", "indexed", "excluded", "errors"):
-        assert data.get(field, 0) >= 0
-print(f"  scanner asserted OK: files={res['total_files']} "
-      f"ingested={res['ingested']} indexed={res['indexed']} unchanged2={res2['unchanged']}")
+
+async def main():
+    assert await is_enabled(), "OBSIDIAN_VAULT_PATH not set"
+    # First pass: scan all fixture files; a re-pass must not re-ingest anything.
+    res = await scan_vault(limit=50)
+    res2 = await scan_vault(limit=50)
+    assert res["total_files"] == 2, f"expected 2 fixture notes, got {res['total_files']}"
+    assert res2["unchanged"] >= 1 or res2["scanned"] == 0, "second pass should find no new work"
+    for data in (res, res2):
+        for field in ("ingested", "indexed", "excluded", "errors"):
+            assert data.get(field, 0) >= 0
+    print(f"  scanner asserted OK: files={res['total_files']} "
+          f"ingested={res['ingested']} indexed={res['indexed']} unchanged2={res2['unchanged']}")
+
+asyncio.run(main())
 PY
   [ $? -eq 0 ] && green "  PASS  obsidian scanner assertions" && PASS=$((PASS+1)) \
                 || { red "  FAIL  obsidian scanner assertions"; FAIL=$((FAIL+1)); }

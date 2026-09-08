@@ -1,0 +1,47 @@
+# Cyber Career OS — single-host deployment.
+#
+# Topology: browser → frontend:3000; frontend server (Next.js rewrite proxy)
+# → backend:8000. The /api/* rewrites in next.config.js run server-side, so
+# BACKEND_URL must be the backend's address as reachable FROM the frontend
+# container on the docker network — http://backend:8000 — not a browser URL.
+#
+# Run with the explicit -f flag: the repo also contains a compose.yaml used
+# by development tooling (playwright-mcp), and compose v2 prefers it.
+#   docker compose -f docker-compose.yml up --build -d
+#
+# Backend state: SQLite + in-process scheduler on ONE always-on container
+# (never serverless, never scale >1). The named volume persists the DB.
+services:
+  backend:
+    build: ./backend
+    env_file: backend/.env
+    volumes:
+      - backend-data:/app/data
+    ports:
+      # Loopback-only publish: the backend has NO authentication — never
+      # expose :8000 directly to a network. The frontend container reaches
+      # the backend over the compose network (http://backend:8000), not via
+      # this published port; keep it for local dev access (/docs) only.
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Effective value — Next.js bakes rewrites at build time; this is
+        # what the container actually proxies /api/* to.
+        BACKEND_URL: http://backend:8000
+    environment:
+      # Kept for shape/consistency only. `next start` does NOT re-read
+      # BACKEND_URL (verified against Next 14.1.0); the build arg above is
+      # the value in effect. To change it, rebuild the frontend image.
+      BACKEND_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  backend-data:
