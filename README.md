@@ -111,25 +111,26 @@ display; technical detail stays in server logs.
 
 ## Deployment (Docker, single host)
 
+The stack lives in `docker-compose.yml`. Local run:
+
 ```bash
 docker compose -f docker-compose.yml up --build -d
 ```
 
-Use the explicit `-f docker-compose.yml` — the repo root also has a
-`compose.yaml` (dev tooling) that compose v2 would otherwise pick first.
+(Keep the `-f` — belt and suspenders; the repo no longer ships a root
+`compose.yaml`, so plain `docker compose up` also works. The former
+`compose.yaml` was local-only dev tooling and is gitignored.)
 
 Two entry points:
 
 - **Your own reverse proxy (Caddy etc.)** — the default. Both containers
   publish loopback-only host ports (default `127.0.0.1:1122` frontend,
   `127.0.0.1:1123` backend; override `FRONTEND_PORT`/`BACKEND_PORT`). Point
-  your proxy at the frontend port and proxy `/api` off the same site block —
-  the frontend already forwards `/api/*` to the backend server-side, so a
-  single site block with no `/api` handle is enough:
+  your proxy at the frontend port — a single site block is enough; `/api/*`
+  is same-origin and handled by the Next.js rewrite inside the frontend
+  container:
 
   ```caddyfile
-  # Caddyfile — one site, one origin; /api/* is same-origin and handled
-  # by the Next.js rewrite inside the frontend container.
   career.example.com {
       reverse_proxy 127.0.0.1:1122
   }
@@ -143,20 +144,29 @@ Two entry points:
   Traefik terminates TLS and routes to the container port (3000) directly.
   Set `CORS_ORIGINS=https://<your-coolify-domain>` in that case.
 
-### Coolify (Docker Compose resource)
+### Coolify (Docker Compose from Git, auto-deploy on push)
 
-1. **New Resource → Docker Compose**, point it at this GitHub repo, select
-   `docker-compose.yml`.
-2. Coolify lists the stack's variables. `GROQ_API_KEY` is **required**
-   (`${GROQ_API_KEY:?}` — deploy is blocked until you paste a key). The rest
-   are prefilled with defaults; edit if needed.
-3. Leave domains unassigned if you use your own Caddy (loopback ports are
-   the entry point); assign a frontend domain only for the Coolify-proxy flow.
-4. Deploy. SQLite data persists in the `backend-data` volume named volume.
+The "Docker Compose Empty" resource (paste box) does **not** auto-deploy —
+it's a one-off. For push-to-deploy you need the **git-based** Docker Compose
+resource:
 
-`backend/.env` is **not** used in this stack (it's gitignored and absent on
-Coolify's fresh clone — the compose `environment:` block is the env source).
-The Settings UI still wins over these for anything configurable there.
+1. In Coolify: **Sources → Add → GitHub App** (or add a deploy key if you
+   prefer SSH). Install the GitHub App on `Ctum0/cyber-career-os`.
+2. New Resource → **Docker Compose** → choose **"Based on a Git repository"**
+   (public repo / private with the GitHub App — not the empty/paste option).
+   Pick the `cyber-career-os` repo, branch `main`.
+3. When Coolify parses the stack it lists the services; set `GROQ_API_KEY`
+   (required, red until filled) and any overrides (`FRONTEND_PORT`,
+   `BACKEND_PORT`, `CORS_ORIGINS`). Leave domains unassigned — your Caddy is
+   the entry point via the loopback ports.
+4. Deploy. On every push to `main`, the GitHub App webhook rebuilds and
+   redeploys automatically. (Webhook → resource → Webhooks shows the URL if
+   you ever need to wire it manually.)
+5. `backend/.env` is **not** used (gitignored, absent on Coolify's clone) —
+   the compose `environment:` block is the env source. Settings UI still wins
+   for anything configurable there. SQLite persists in the `backend-data`
+   named volume across redeploys.
+
 
 ### Environment variables
 

@@ -11,3 +11,6 @@ data/
 .agents
 .artifacts/
 .commandcode/
+
+# Dev tooling only — never deploy this (playwright-mcp harness)
+compose.yaml
