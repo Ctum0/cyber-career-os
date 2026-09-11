@@ -14,6 +14,7 @@ from ..core.errors import AppError
 from ..core.groq_client import generate_weekly_digest
 from ..core.serialize import as_list, as_dict
 from ..models.schemas import JournalUpdateRequest
+from ..services import graph
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/digest", tags=["digest"])
@@ -72,12 +73,15 @@ async def build_weekly_context(db):
             skill_name = item.get("skill", "")
             if not skill_name:
                 continue
-            node = await db.execute(
-                "SELECT confidence_score FROM nodes WHERE type = 'skill' AND label = ?",
-                (skill_name,),
-            )
-            skill = await node.fetchone()
-            conf = skill["confidence_score"] if skill else 0
+            skill_id = await graph.find_node(db, "skill", skill_name)
+            conf = 0
+            if skill_id:
+                conf_row = await db.execute(
+                    "SELECT confidence_score FROM nodes WHERE id = ?", (skill_id,)
+                )
+                hit = await conf_row.fetchone()
+                conf = hit["confidence_score"] if hit else 0
+
             if conf < 50:
                 gaps.append(f"{role['role_name']}: {skill_name} ({conf}/100)")
     gaps_str = "\n".join(gaps[:10]) if gaps else "No target roles set"

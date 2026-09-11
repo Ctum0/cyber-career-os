@@ -37,6 +37,7 @@ DEFAULTS: dict[str, Any] = {
     "obsidian.max_notes_per_scan": 0,
     "obsidian.max_images_per_note": 0,
     "obsidian.max_image_size": 0,
+    "obsidian.attachments_dir": "",        # embedded-attachment folder override (consumed by services/obsidian.py)
 
     # RSS
     "rss.feeds": config.RSS_FEEDS,

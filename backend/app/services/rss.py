@@ -143,11 +143,3 @@ async def process_pending_ingests(limit: int = 20) -> dict:
     return {"processed": processed, "errors": errors}
 
 
-def run_rss_ingest():
-    """Sync wrapper for external cron (README documents this contract)."""
-    asyncio.run(ingest_rss_feeds())
-
-
-def run_process_pending():
-    """Sync wrapper for external cron."""
-    asyncio.run(process_pending_ingests())

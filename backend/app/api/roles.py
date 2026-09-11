@@ -34,15 +34,7 @@ async def set_target_role(req: TargetRoleCreate):
         )
 
         # Ensure the role node exists once, then link every checklist skill.
-        role_row = await db.execute(
-            "SELECT id FROM nodes WHERE type = 'role' AND label = ?", (req.role_name,)
-        )
-        role = await role_row.fetchone()
-        if role:
-            role_id = role["id"]
-        else:
-            role_id = await graph.find_or_create_node(db, "role", req.role_name)
-
+        role_id = await graph.find_or_create_node(db, "role", req.role_name)
         for item in checklist:
             skill_name = item.get("skill", "")
             if not skill_name:
@@ -101,12 +93,14 @@ async def get_skill_gaps(role_name: str):
             skill_name = item.get("skill", "")
             importance = item.get("importance", 5)
 
-            skill_node = await db.execute(
-                "SELECT confidence_score FROM nodes WHERE type = 'skill' AND label = ?",
-                (skill_name,),
-            )
-            skill = await skill_node.fetchone()
-            confidence = skill["confidence_score"] if skill else 0.0
+            skill_id = await graph.find_node(db, "skill", skill_name)
+            confidence = 0.0
+            if skill_id:
+                conf_row = await db.execute(
+                    "SELECT confidence_score FROM nodes WHERE id = ?", (skill_id,)
+                )
+                hit = await conf_row.fetchone()
+                confidence = hit["confidence_score"] if hit else 0.0
 
             gaps.append({
                 "skill": skill_name,

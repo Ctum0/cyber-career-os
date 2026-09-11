@@ -19,8 +19,8 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
-# The single authoritative in-process scheduler. Do not also run
-# backend/scheduler.py or external crons for the same jobs (README).
+# The single authoritative in-process scheduler. Do not run external crons
+# or a second scheduler for these jobs (README documents this contract).
 scheduler = AsyncIOScheduler()
 
 

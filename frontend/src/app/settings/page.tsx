@@ -422,7 +422,7 @@ function ObsidianTab({
           Vault Location
         </h2>
         <p className="section-desc mb-4">
-          Changes take effect on the next sync — no restart needed. The vault is always read-only.
+          Changes apply immediately — the scan job reschedules itself when you save. The vault is always read-only.
         </p>
 
         <Field label="Vault Path">

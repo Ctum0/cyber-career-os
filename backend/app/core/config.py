@@ -33,7 +33,6 @@ CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3
 # --- Obsidian vault sync bootstrap (also configurable at /settings) --------- #
 # Feature is disabled until a vault path is set (DB setting or this env var).
 OBSIDIAN_VAULT_PATH = os.getenv("OBSIDIAN_VAULT_PATH", "")
-OBSIDIAN_SCAN_INTERVAL_MINUTES = int(os.getenv("OBSIDIAN_SCAN_INTERVAL_MINUTES", "30"))
 OBSIDIAN_INCLUDE_FOLDERS = [p.strip() for p in os.getenv("OBSIDIAN_INCLUDE_FOLDERS", "").split(",") if p.strip()]
 OBSIDIAN_EXCLUDE_FOLDERS = [p.strip() for p in os.getenv("OBSIDIAN_EXCLUDE_FOLDERS", "").split(",") if p.strip()]
 OBSIDIAN_REQUIRED_TAGS = [t.strip().lstrip("#") for t in os.getenv("OBSIDIAN_REQUIRED_TAGS", "").split(",") if t.strip()]

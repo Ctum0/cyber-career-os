@@ -46,16 +46,9 @@ async def create_writeup(req: CTFWriteupRequest):
         node_id = await graph.find_or_create_node(db, "ctf", title, structured.get("lesson", ""))
 
         for tech_id in techniques:
-            tech_node = await db.execute(
-                "SELECT id FROM nodes WHERE type = 'tool' AND label = ?", (tech_id,)
+            tech_node_id = await graph.find_or_create_node(
+                db, "tool", tech_id, "ATT&CK technique"
             )
-            existing = await tech_node.fetchone()
-            if existing:
-                tech_node_id = existing["id"]
-            else:
-                tech_node_id = await graph.find_or_create_node(
-                    db, "tool", tech_id, "ATT&CK technique"
-                )
             await graph.create_edge(db, node_id, tech_node_id, "uses_technique")
 
         cursor = await db.execute(

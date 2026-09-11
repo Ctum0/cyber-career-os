@@ -14,6 +14,7 @@ from typing import Any
 
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
+from apscheduler.triggers.interval import IntervalTrigger
 
 from ..core import config, settings_store
 from ..core.llm_client import list_models, test_connection
@@ -72,6 +73,7 @@ async def update_settings(req: SettingsUpdate):
     """Update multiple settings at once. Keys must be fully qualified.
 
     A masked placeholder value for a secret key is ignored (keeps stored key).
+    Scheduler-affecting obsidian settings reschedule the live job immediately.
     """
     valid_prefixes = {"ai", "obsidian", "rss", "advanced"}
     for key in req.settings:
@@ -80,8 +82,37 @@ async def update_settings(req: SettingsUpdate):
             raise HTTPException(status_code=400, detail=f"Unknown setting prefix: {prefix or key}")
 
     payload = {k: v for k, v in req.settings.items() if v != SECRET_PLACEHOLDER}
-    await settings_store.set_many(_strip_secrets(payload))
+    changed = _strip_secrets(payload)
+    await settings_store.set_many(changed)
+    await _sync_obsidian_schedule(changed)
     return {"status": "ok", "updated": list(req.settings.keys())}
+
+
+async def _sync_obsidian_schedule(changed: dict) -> None:
+    """Keep the live obsidian_scan job in step with settings, no restart.
+
+    - interval changed (vault enabled): reschedule with the new interval
+    - vault path changed: register or remove the job accordingly
+    - unrelated keys changed: no-op
+    """
+    if not any(k.startswith("obsidian.") for k in changed):
+        return
+    # Imported here to avoid a circular import at module load time.
+    from ..main import scheduler
+    from ..services.obsidian import is_enabled, scan_vault
+
+    interval = int(await settings_store.get("obsidian.scan_interval_minutes", 30)) or 30
+    enabled = await is_enabled()
+    existing = scheduler.get_job("obsidian_scan")
+    if enabled:
+        if existing:
+            existing.modify(trigger=IntervalTrigger(minutes=interval))
+        else:
+            scheduler.add_job(
+                scan_vault, "interval", minutes=interval, id="obsidian_scan"
+            )
+    elif existing:
+        existing.remove()
 
 
 # ------------------------------------------------------------------ #

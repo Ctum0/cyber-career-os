@@ -24,9 +24,9 @@ The FastAPI app entrypoint lives at `backend/app/main.py` (not `backend/main.py`
 
 ## Architecture
 - **Backend** (`backend/app/`): FastAPI + SQLite via aiosqlite (WAL, no ORM), Pydantic v2 schemas in `models/schemas.py`. One APIRouter file per page feature: `api/{ingest,graph,roles,skills,projects,ctf,applications,digest}.py`, all mounted in `main.py`. DB access is inline `get_db()` + raw SQL everywhere; row_factory is `aiosqlite.Row` (access columns by name).
-- **DB**: `backend/data/cybercareer.db`, auto-created and gitignored. The whole schema is the `SCHEMA` string in `app/core/database.py`; `init_db()` runs at app startup. Node IDs are `{type}_{uuid4hex8}`, deduped by `(type, label)`.
-- **Confidence scores**: 0–100, default 50; weekly decay (Sunday 2 AM) drops untouched skill nodes by 5 (`confidence_score = MAX(0, score-5)`). Groq review responses overwrite a skill's score.
-- **Scheduled jobs** run in-process: RSS ingest every 6 h, pending-ingest processing every 30 min, confidence decay Sunday 2 AM, Obsidian vault scan (only if enabled) (both `main.py` lifespan and standalone `backend/scheduler.py`).
+- **DB**: `backend/data/cybercareer.db`, auto-created and gitignored. Baseline schema + ordered migrations tracked in `schema_migrations` (`app/core/database.py`); `init_db()` runs them at app startup. Node IDs are `{type}_{uuid4hex8}`, identity is `(type, label_norm)` with a DB-unique index; all graph writes go through `app/services/graph.py`.
+- **Confidence scores**: 0–100, default 50; weekly decay (Sunday 2 AM) drops untouched skills by `advanced.confidence_decay_amount` (default 5), gated once per UTC day (`advanced.last_decay_run` watermark; `POST /skills/decay?force=true` overrides). Groq review responses overwrite a skill's score.
+- **Scheduled jobs** run in one in-process scheduler (main.py lifespan; no standalone scheduler.py exists): RSS ingest every 6 h, pending-ingest processing every 30 min, confidence decay Sunday 2 AM, Obsidian vault scan (only if vault path set; interval changes via Settings reschedule the live job — no restart).
 
 ### Settings system (`app/api/settings.py`, `app/core/settings_store.py`)
 - **Settings table**: `settings` table in SQLite with `key` (PK), `value` (JSON-encoded), `updated_at`. Schema in `database.py`.
@@ -45,7 +45,7 @@ The FastAPI app entrypoint lives at `backend/app/main.py` (not `backend/main.py`
 ### Obsidian vault sync (`app/services/obsidian.py`)
 - Reads an Obsidian vault into the graph **strictly read-only** (vault files opened `rb` only; `.obsidian/`, `.trash/`, `.git` always skipped). Incremental via content hashes in the `vault_files` table — only new/changed notes are processed.
 - Source abstraction: `ObsidianSource` ABC → `LocalFolderSource` (default) + `GitRepoSource` stub (unimplemented, for remote hosting later). Add sources by implementing the ABC — parsing/ingestion is shared in `scan_vault()`.
-- Config in `backend/.env` (all in `.env.example`): `OBSIDIAN_VAULT_PATH` (off until set), `OBSIDIAN_SCAN_INTERVAL_MINUTES`, `OBSIDIAN_INCLUDE_FOLDERS`/`OBSIDIAN_EXCLUDE_FOLDERS` (hard filter), `OBSIDIAN_REQUIRED_TAGS` (gate for LLM extraction; untagged notes are indexed only, no Groq call), `OBSIDIAN_MAX_NOTES_PER_SCAN`, `OBSIDIAN_MAX_IMAGES_PER_NOTE`, `OBSIDIAN_MAX_IMAGE_SIZE` (Pillow downscale), `GROQ_VISION_MODEL` (default `qwen/qwen3.6-27b`).
+- Config: vault path, include/exclude folders, required tags (gate for LLM extraction; untagged notes are indexed only, no LLM call), max notes per scan, max images per note, max image size (Pillow downscale) — all env-bootstrapped via `backend/.env` (see `.env.example`) and runtime-configurable in Settings → Obsidian Vault (scan interval included).
 - Embedded images (`![[name.png]]`) are base64-fed to the Groq vision model (`groq_client.describe_image`) and merged into entity extraction. Uses Pillow + `python-frontmatter`.
 - Deps: `Pillow`, `python-frontmatter` were added to `requirements.txt`. Restart the backend after changing vault config (config reads at import).
 - **Tests**: `test.sh` builds a throwaway fixture vault at `backend/data/vault_test` (never the real one), overrides `OBSIDIAN_VAULT_PATH` in `.env` if unset, and asserts `/obsidian/status` + `/obsidian/sync` plus config-redection. Keep tests pointed at the fixture, never the real vault.

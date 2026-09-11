@@ -29,12 +29,14 @@ async def get_project_ideas():
             skill_name = item.get("skill", "")
             if not skill_name:
                 continue
-            node = await db.execute(
-                "SELECT confidence_score FROM nodes WHERE type = 'skill' AND label = ?",
-                (skill_name,),
-            )
-            skill = await node.fetchone()
-            confidence = skill["confidence_score"] if skill else 0
+            skill_id = await graph.find_node(db, "skill", skill_name)
+            confidence = 0
+            if skill_id:
+                conf_row = await db.execute(
+                    "SELECT confidence_score FROM nodes WHERE id = ?", (skill_id,)
+                )
+                hit = await conf_row.fetchone()
+                confidence = hit["confidence_score"] if hit else 0
             weak_skills.append({
                 "skill": skill_name,
                 "priority": item.get("importance", 5) * (100 - confidence),
@@ -74,13 +76,9 @@ async def create_project(req: ProjectCreate):
         node_id = await graph.find_or_create_node(db, "project", req.title, req.description or "")
 
         for skill_name in req.skills_targeted:
-            skill = await db.execute(
-                "SELECT id FROM nodes WHERE type = 'skill' AND label = ?",
-                (skill_name,),
-            )
-            skill_row = await skill.fetchone()
-            if skill_row:
-                await graph.create_edge(db, node_id, skill_row["id"], "builds_skill")
+            skill_id = await graph.find_node(db, "skill", skill_name)
+            if skill_id:
+                await graph.create_edge(db, node_id, skill_id, "builds_skill")
 
         cursor = await db.execute(
             """INSERT INTO projects (node_id, title, description, architecture, stack, stretch_goals)

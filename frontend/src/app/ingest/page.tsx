@@ -144,7 +144,7 @@ export default function IngestPage() {
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
       {result && (
-        <div className="card animate-in fade-in duration-200 border-cyber-500/30">
+        <div className="card fade-in border-cyber-500/30">
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-cyber-500" />

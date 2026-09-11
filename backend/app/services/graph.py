@@ -46,6 +46,20 @@ async def find_or_create_node(
     )
     return node_id
 
+async def find_node(db, node_type: str, label: str) -> str | None:
+    """Look up a node by (type, normalized label). No creation, no touch.
+
+    Read-side counterpart of find_or_create_node: callers matching nodes by
+    label must use this (not raw label equality) or they miss nodes whose
+    display casing/whitespace differs.
+    """
+    row = await db.execute(
+        "SELECT id FROM nodes WHERE type = ? AND label_norm = ?",
+        (node_type, normalize_label(label)),
+    )
+    hit = await row.fetchone()
+    return hit["id"] if hit else None
+
 
 async def create_edge(db, from_id: str, to_id: str, relation: str) -> bool:
     """Create an edge if absent. Returns True when a new edge was created."""

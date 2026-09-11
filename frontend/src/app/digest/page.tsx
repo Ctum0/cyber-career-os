@@ -83,7 +83,7 @@ export default function DigestPage() {
       </div>
 
       {currentDigest && (
-        <div className="card animate-in fade-in duration-200">
+        <div className="card fade-in">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
             <Calendar className="w-5 h-5 text-cyber-500" />
             Week of {currentDigest.week_of}

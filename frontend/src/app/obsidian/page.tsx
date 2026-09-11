@@ -121,7 +121,7 @@ export default function ObsidianPage() {
       )}
 
       {result && (
-        <div className="card animate-in fade-in duration-200">
+        <div className="card fade-in">
           <div className="flex items-center gap-2 mb-3 border-b border-slate-100 dark:border-slate-800 pb-3">
             <CheckCircle2 className="w-5 h-5 text-cyber-500" />
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Last Sync Result</h2>

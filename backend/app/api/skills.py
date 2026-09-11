@@ -1,6 +1,7 @@
 """Page 4: Skill Pipeline API routes."""
 import json
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
@@ -89,11 +90,13 @@ async def generate_modules(limit: int = 5):
             if not skill_name or skill_name in seen:
                 continue
             seen.add(skill_name)
-            node = await db.execute(
-                "SELECT id, confidence_score FROM nodes WHERE type = 'skill' AND label = ?",
-                (skill_name,),
-            )
-            skill = await node.fetchone()
+            skill_id = await graph.find_node(db, "skill", skill_name)
+            skill = None
+            if skill_id:
+                conf_row = await db.execute(
+                    "SELECT confidence_score FROM nodes WHERE id = ?", (skill_id,)
+                )
+                skill = await conf_row.fetchone()
             if skill:
                 importance = item.get("importance", 5)
                 prioritized.append({
@@ -216,8 +219,18 @@ async def submit_solution(module_id: int, req: SolutionSubmit):
 
 
 @router.post("/decay")
-async def decay_confidence_scores():
-    """Decay confidence for untouched skills (weekly job; settings-driven)."""
+async def decay_confidence_scores(force: bool = False):
+    """Decay confidence for untouched skills (weekly job; settings-driven).
+
+    Idempotent per day by default: the run watermark is stamped in settings
+    (advanced.last_decay_run, UTC date). A second run on the same UTC day is a
+    no-op unless force=True, so a manual trigger colliding with the weekly
+    job cannot double-decay. force=True resets the watermark after running.
+    """
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if not force and await settings_store.get("advanced.last_decay_run", "") == today:
+        return {"status": "already decayed today", "skills_decayed": 0}
+
     amount = await settings_store.get("advanced.confidence_decay_amount", 5)
     days = await settings_store.get("advanced.confidence_decay_days", 7)
     db = await get_db()
@@ -233,6 +246,7 @@ async def decay_confidence_scores():
             (amount, f"-{days} days"),
         )
         await db.commit()
+        await settings_store.set("advanced.last_decay_run", today)
         if cursor.rowcount:
             log.info("Confidence decay applied to %d skills", cursor.rowcount)
         return {"status": "decay applied", "skills_decayed": cursor.rowcount}

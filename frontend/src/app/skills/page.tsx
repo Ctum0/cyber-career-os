@@ -324,7 +324,7 @@ export default function SkillsPage() {
 
               {/* AI Review Outcome Card */}
               {review && (
-                <div className="p-5 rounded-2xl bg-slate-900 border border-cyber-500/30 text-slate-100 space-y-3 animate-in fade-in duration-200">
+                <div className="p-5 rounded-2xl bg-slate-900 border border-cyber-500/30 text-slate-100 space-y-3 fade-in">
                   <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                     <h4 className="text-sm font-bold text-cyber-400 flex items-center gap-1.5">
                       <Sparkles className="w-4 h-4" />

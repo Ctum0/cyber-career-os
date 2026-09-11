@@ -9,8 +9,11 @@ Available tasks: entity_extraction, skill_checklist, skill_module, solution_revi
                  project_ideas, ctf_restructure, job_analysis, weekly_digest, image_description.
 """
 import json
+import logging
 from typing import Any
 from . import settings_store
+
+log = logging.getLogger(__name__)
 
 # Provider-specific defaults
 PROVIDER_DEFAULTS = {
@@ -170,12 +173,11 @@ async def list_models() -> list[dict]:
             models = data.get("data", [])
             return [{"id": m.get("id", ""), "name": m.get("id", "")} for m in models if m.get("id")]
     except Exception:
-        # Return provider defaults if the endpoint isn't available
-        defaults = PROVIDER_DEFAULTS.get(config["provider"], PROVIDER_DEFAULTS["groq"])
-        return [
-            {"id": defaults["default_model"], "name": defaults["default_model"]},
-            {"id": defaults["default_vision_model"], "name": defaults["default_vision_model"]},
-        ]
+        # Provider unreachable/misconfigured: raise so callers can surface a
+        # real error instead of silently showing provider defaults as if the
+        # fetch had succeeded.
+        log.warning("list_models failed for provider %s at %s", config["provider"], url)
+        raise
 
 
 async def test_connection() -> dict:

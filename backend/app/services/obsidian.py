@@ -441,6 +441,10 @@ async def scan_vault(limit: int | None = None) -> dict:
                     if status in ("ingested", "indexed"):
                         results["notes"].append({"path": rel_path, "status": status})
                 except Exception as e:
+                    # Roll back any partial writes from the failed note so
+                    # they are neither leaked into the next note's commit nor
+                    # lost mid-transaction; the note is retried next scan.
+                    await db.rollback()
                     results["errors"] += 1
                     results.setdefault("error_details", []).append({"path": rel_path, "error": str(e)})
 
